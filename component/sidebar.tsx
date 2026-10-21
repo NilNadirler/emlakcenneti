@@ -140,10 +140,7 @@ const filters = [
     title: "Takaslı",
     options: ["Evet", "Hayır"],
   },
-  {
-    title: "İlan Tarihi",
-    options: ["Son 24 saat", "Son 3 gün", "Son 7 gün", "Son 15 gün", "Son 30 gün"],
-  },
+  
   {
     title: "Fotoğraf, Video",
     options: ["Fotoğraflı", "Videolu", "Sanal Turlu"],
