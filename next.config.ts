@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   serverExternalPackages:["iyzipay"],
+  devIndicators: false,
   experimental: {
     agentFeedback: true,
   },

@@ -25,11 +25,15 @@ export default function HomePage() {
         .eq("id", user.id)
         .maybeSingle();
 
-      if (error || !data) {
-        setBalance(0);
-      } else {
-        setBalance(Number(data.balance ?? 0));
-      }
+    if (error) {
+  console.error("Bakiye okuma hatası:", error);
+  setBalance(0);
+} else if (!data) {
+  console.error("Giriş yapan kullanıcı için profiles kaydı bulunamadı.");
+  setBalance(0);
+} else {
+  setBalance(Number(data.balance ?? 0));
+}
     }
 
     loadBalance();

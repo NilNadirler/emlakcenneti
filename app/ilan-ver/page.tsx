@@ -1,7 +1,6 @@
-
 "use client";
-
 import { useState } from "react";
+import { supabase } from "@/app/lib/supabase";
 
 const odaSecenekleri = [
   "Stüdyo (1+0)", "1+1", "1.5+1", "2+0", "2+1", "2.5+1",
@@ -67,12 +66,77 @@ export default function IlanVer() {
         </p>
 
         <form
-          className="mt-6 space-y-6"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setMesaj("Form hazır. İlanı kaydetmek için veritabanı bağlantısı gerekiyor.");
-          }}
-        >
+  className="mt-6 space-y-6"
+  onSubmit={async (e) => {
+    e.preventDefault();
+    setMesaj("İlan kaydediliyor...");
+
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      setMesaj("İlan vermek için önce giriş yapmalısın.");
+      return;
+    }
+
+    console.log("Giriş yapan kullanıcı ID:", user.id);
+    console.log("Gönderilecek ilan durumu:", "pending");
+    const fiyat = Number(formData.get("fiyat"));
+
+    const { data, error } = await supabase
+      .from("listings")
+      .insert({
+        user_id: user.id,
+        status: "pending",
+        title: String(formData.get("baslik") || ""),
+        description: String(formData.get("aciklama") || ""),
+        category: String(formData.get("kategori") || ""),
+        listing_type: String(formData.get("ilanTuru") || ""),
+        price: fiyat,
+        currency: String(formData.get("paraBirimi") || "TL"),
+        city: String(formData.get("İl") || ""),
+        district: String(formData.get("İlçe") || ""),
+        neighborhood: String(formData.get("Semt / Mahalle") || ""),
+        net_sqm: Number(formData.get("netMetrekare")) || null,
+        open_area_sqm: Number(formData.get("acikAlan")) || null,
+        room_count: String(formData.get("odaSayisi") || ""),
+        building_age: String(formData.get("Bina Yaşı") || ""),
+        floor_count: String(formData.get("Kat Sayısı") || ""),
+        floor_level: String(formData.get("Bulunduğu Kat") || ""),
+        is_middle_floor: formData.get("Ara Kat") === "Evet",
+        heating: String(formData.get("Isıtma") || ""),
+        bathroom_count: String(formData.get("Banyo Sayısı") || ""),
+        kitchen_type: String(formData.get("Mutfak") || ""),
+        balcony: String(formData.get("Balkon") || ""),
+        elevator: String(formData.get("Asansör") || ""),
+        parking: String(formData.get("Otopark") || ""),
+        furnished: String(formData.get("Eşyalı") || ""),
+        occupancy_status: String(formData.get("Kullanım Durumu") || ""),
+        in_complex: formData.get("Site İçerisinde") === "Evet",
+        mortgage_eligible: formData.get("Krediye Uygun") === "Evet",
+        deed_status: String(formData.get("Tapu Durumu") || ""),
+        seller_type: String(formData.get("Kimden") || ""),
+        exchange_possible: formData.get("Takaslı") === "Evet",
+        media_type: String(formData.get("Fotoğraf / Video") || ""),
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error("İlan kaydetme hatası:", error);
+      setMesaj(`İlan kaydedilemedi: ${error.message}`);
+      return;
+    }
+
+    setMesaj("İlan başarıyla kaydedildi!");
+    window.location.href = "/ilanlarim";
+  }}
+>
           <section className="rounded-2xl border border-[#E8E3D8] bg-white p-5">
             <h2 className="mb-4 text-lg font-bold">1. İlan Bilgileri</h2>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -146,7 +210,7 @@ export default function IlanVer() {
           <section className="rounded-2xl border border-[#E8E3D8] bg-white p-5">
             <h2 className="mb-4 text-lg font-bold">2. Adres</h2>
             <div className="grid gap-4 sm:grid-cols-2">
-              {["İl", "İlçe", "Semt / Mahalle", "Açık Adres"].map((alan) => (
+              {["İl", "İlçe", "Semt / Mahalle"].map((alan) => (
                 <label key={alan} className="block text-sm font-medium">
                   {alan}
                   <input name={alan} required className={`${inputClass} mt-1.5`} />

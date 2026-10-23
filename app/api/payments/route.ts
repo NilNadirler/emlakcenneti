@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import Iyzipay from "iyzipay";
 import { createClient } from "@/app/lib/supabase-server";
 import { loadEnvConfig } from "@next/env";
+import { createAdminClient } from "@/app/lib/supabase-admin";
 
 loadEnvConfig(process.cwd());
 
@@ -138,12 +139,39 @@ if (authError || !user) {
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      paymentPageUrl: result.paymentPageUrl,
-      token: result.token,
-      conversationId,
-    });
+ const supabaseAdmin = createAdminClient();
+const { error: paymentInsertError } = await supabaseAdmin
+.from("wallet_payments")
+  .insert({
+    user_id: user.id,
+    amount,
+    conversation_id: conversationId,
+    token: result.token,
+    status: "pending",
+  });
+
+
+if (paymentInsertError) {
+  console.error("Ödeme kaydı oluşturulamadı:", paymentInsertError);
+
+  return NextResponse.json(
+    {
+      success: false,
+      error: `Ödeme kaydı oluşturulamadı: ${paymentInsertError.message}`,
+      details: paymentInsertError,
+    },
+    { status: 500 }
+  );
+}
+
+
+return NextResponse.json({
+  success: true,
+  paymentPageUrl: result.paymentPageUrl,
+  token: result.token,
+  conversationId,
+});
+
   } catch (error) {
     console.error("Ödeme başlatma hatası:", error);
     return NextResponse.json(

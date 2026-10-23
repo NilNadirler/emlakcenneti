@@ -5,7 +5,7 @@ import { createClient } from "@/app/lib/supabase-server";
 
 export default function PaymentAmount() {
   const [amount, setAmount] = useState("3000");
-
+  const [loading, setLoading] = useState(false);
   const numericAmount = Number(amount);
   const isValid =
     Number.isInteger(numericAmount) &&
@@ -69,9 +69,11 @@ export default function PaymentAmount() {
         )}
 
         <button
+
           type="button"
-          disabled={!isValid}
+          disabled={!isValid || loading}
           onClick={async () => {
+            setLoading(true);
             try {
               const { data: sessionData } = await supabase.auth.getSession();
 
@@ -102,16 +104,25 @@ export default function PaymentAmount() {
                  return;
            }
 
-alert(result.error || "Ödeme sayfası oluşturulamadı.");
+           alert(result.error || "Ödeme sayfası oluşturulamadı.");
             } catch {
               alert("Sunucuya bağlanılamadı.");
+            }finally {
+              setLoading(false);
             }
 
             console.log("Seçilen tutar:", numericAmount);
           }}
           className="w-full rounded-lg bg-blue-600 p-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Ödemeye Devam Et
+          {loading ? (
+    <span className="flex items-center justify-center gap-2">
+      <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+      Ödeme sayfası açılıyor...
+    </span>
+  ) : (
+    "Ödemeye Devam Et"
+  )}
         </button>
       </div>
     </div>
