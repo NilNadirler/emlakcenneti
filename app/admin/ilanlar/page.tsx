@@ -5,29 +5,36 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 
 type Listing = {
-  id: string | number;
+  id: string;
   title: string;
   description: string | null;
-  price: number | null;
+  price: number | string;
   city: string | null;
   district: string | null;
-  status: string | null;
+  status: string;
   created_at: string;
+  user_id: string;
+  listing_photos?: {
+    storage_path: string;
+    sort_order: number;
+    is_cover: boolean;
+  }[];
 };
 
 export default function AdminIlanlarPage() {
   const router = useRouter();
+
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [selected, setSelected] = useState<Listing | null>(null);
 
   useEffect(() => {
-    async function checkAdmin() {
-      const { data: authData, error: authError } =
-        await supabase.auth.getUser();
-
-      const user = authData.user;
+    async function checkAdminAndLoad() {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
       if (authError || !user) {
         router.replace("/giris");
@@ -49,15 +56,35 @@ export default function AdminIlanlarPage() {
     }
 
     async function loadListings() {
+      setLoading(true);
+      setMessage("");
+
       const { data, error } = await supabase
         .from("listings")
         .select(
-          "id, title, description, price, city, district, status, created_at"
+          `
+          id,
+          title,
+          description,
+          price,
+          city,
+          district,
+          status,
+          created_at,
+          user_id,
+          listing_photos (
+            storage_path,
+            sort_order,
+            is_cover
+          )
+        `,
         )
+        .eq("status", "pending")
         .order("created_at", { ascending: false });
 
       if (error) {
         setMessage("İlanlar yüklenemedi: " + error.message);
+        setListings([]);
       } else {
         setListings((data ?? []) as Listing[]);
       }
@@ -65,109 +92,165 @@ export default function AdminIlanlarPage() {
       setLoading(false);
     }
 
-    checkAdmin();
+    void checkAdminAndLoad();
   }, [router]);
 
   async function updateStatus(
-    listingId: Listing["id"],
-    status: "published" | "rejected"
+    listingId: string,
+    status: "published" | "rejected",
   ) {
+    const action = status === "published" ? "onaylamak" : "reddetmek";
+
+    if (!window.confirm(`Bu ilanı ${action} istediğine emin misin?`)) {
+      return;
+    }
+
+    setUpdatingId(listingId);
+    setMessage("");
+
     const { error } = await supabase
       .from("listings")
       .update({ status })
-      .eq("id", listingId);
+      .eq("id", listingId)
+      .eq("status", "pending");
 
     if (error) {
       setMessage("İşlem başarısız: " + error.message);
+      setUpdatingId(null);
       return;
     }
 
     setListings((current) =>
-      current.map((listing) =>
-        listing.id === listingId ? { ...listing, status } : listing
-      )
+      current.filter((listing) => listing.id !== listingId),
     );
 
-    if (selected?.id === listingId) {
-      setSelected({ ...selected, status });
-    }
+    setMessage(
+      status === "published"
+        ? "İlan onaylandı ve yayına alındı."
+        : "İlan reddedildi.",
+    );
 
-    setMessage(status === "published" ? "İlan onaylandı." : "İlan reddedildi.");
+    setUpdatingId(null);
   }
 
   if (loading) {
-    return <main className="p-8">Yetki kontrol ediliyor...</main>;
+    return <main className="p-8">İlanlar yükleniyor...</main>;
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-6">
-      <h1 className="mb-2 text-2xl font-bold">Admin – İlan Yönetimi</h1>
-      <p className="mb-6 text-gray-600">
-        İlanları incele, detaylarını aç ve onayla veya reddet.
-      </p>
+    <main className="mx-auto max-w-6xl p-6 md:p-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">Admin - İlan Yönetimi</h1>
+        <p className="mt-2 text-gray-600">
+          İlanları incele, detaylarını gör ve onayla veya reddet.
+        </p>
+      </div>
 
       {message && (
-        <p className="mb-4 rounded bg-gray-100 p-3">{message}</p>
+        <div role="status" className="mb-6 rounded-lg border p-4">
+          {message}
+        </div>
       )}
 
-      {selected && (
-        <section className="mb-6 rounded-xl border p-5">
-          <button
-            className="mb-4 text-sm underline"
-            onClick={() => setSelected(null)}
-          >
-            ← İlan listesine dön
-          </button>
+      {listings.length === 0 ? (
+        <div className="rounded-xl border p-8 text-center text-gray-600">
+          Bekleyen ilan yok.
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {listings.map((listing) => {
+            const photos = [...(listing.listing_photos ?? [])].sort(
+              (a, b) =>
+                Number(b.is_cover) - Number(a.is_cover) ||
+                a.sort_order - b.sort_order,
+            );
 
-          <h2 className="mb-2 text-xl font-semibold">{selected.title}</h2>
-          <p className="mb-2">{selected.description || "Açıklama yok."}</p>
-          <p>Fiyat: {selected.price?.toLocaleString("tr-TR") ?? "Belirtilmemiş"} TL</p>
-          <p>
-            Konum: {[selected.district, selected.city].filter(Boolean).join(", ") || "Belirtilmemiş"}
-          </p>
-          <p>Durum: {selected.status || "pending"}</p>
+            const coverPhoto = photos[0]?.storage_path
+              ? supabase.storage
+                  .from("listing-photos")
+                  .getPublicUrl(photos[0].storage_path.trim()).data.publicUrl
+              : null;
+              
+            return (
+              <article
+                key={listing.id}
+                className="overflow-hidden rounded-2xl border bg-white shadow-sm"
+              >
+                <div className="flex flex-col gap-5 p-4 md:flex-row md:p-6">
+                  <div className="h-52 w-full shrink-0 overflow-hidden rounded-xl bg-gray-100 md:h-56 md:w-72">
+                    {coverPhoto ? (
+                      <img
+                        src={coverPhoto}
+                        alt={listing.title}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-gray-500">
+                        Fotoğraf yok
+                      </div>
+                    )}
+                  </div>
 
-          <div className="mt-5 flex gap-3">
-            <button
-              className="rounded bg-green-700 px-4 py-2 text-white"
-              onClick={() => updateStatus(selected.id, "published")}
-            >
-              Onayla
-            </button>
-            <button
-              className="rounded bg-red-700 px-4 py-2 text-white"
-              onClick={() => updateStatus(selected.id, "rejected")}
-            >
-              Reddet
-            </button>
-          </div>
-        </section>
-      )}
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <div className="mb-3 flex flex-wrap items-center gap-3">
+                      <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800">
+                        Onay bekliyor
+                      </span>
+                      <span className="text-sm text-gray-500">
+                        {new Date(listing.created_at).toLocaleDateString(
+                          "tr-TR",
+                        )}
+                      </span>
+                    </div>
 
-      {!selected && (
-        <div className="space-y-3">
-          {listings.length === 0 && (
-            <p className="rounded-xl border p-5">
-              Henüz ilan yok. Yeni ilanlar burada görünecek.
-            </p>
-          )}
+                    <h2 className="text-xl font-bold text-gray-900">
+                      {listing.title}
+                    </h2>
 
-          {listings.map((listing) => (
-            <button
-              key={listing.id}
-              onClick={() => setSelected(listing)}
-              className="block w-full rounded-xl border p-4 text-left hover:bg-gray-50"
-            >
-              <span className="block font-semibold">{listing.title}</span>
-              <span className="mt-1 block text-sm text-gray-600">
-                {listing.price?.toLocaleString("tr-TR") ?? "Fiyat yok"} TL ·{" "}
-                {[listing.district, listing.city].filter(Boolean).join(", ")}
-              </span>
-              <span className="mt-2 inline-block text-sm">
-                Durum: {listing.status || "pending"} · Detayları aç →
-              </span>
-            </button>
-          ))}
+                    <p className="mt-2 text-2xl font-bold text-gray-900">
+                      {Number(listing.price).toLocaleString("tr-TR")} TL
+                    </p>
+
+                    <p className="mt-2 text-sm text-gray-600">
+                      {[listing.city, listing.district]
+                        .filter(Boolean)
+                        .join(" · ") || "Konum belirtilmemiş"}
+                    </p>
+
+                    <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-gray-700">
+                      {listing.description || "Açıklama girilmemiş."}
+                    </p>
+
+                    {photos.length > 1 && (
+                      <p className="mt-3 text-sm text-gray-500">
+                        Toplam {photos.length} fotoğraf
+                      </p>
+                    )}
+
+                    <div className="mt-auto flex flex-wrap gap-3 pt-6">
+                      <button
+                        type="button"
+                        disabled={updatingId === listing.id}
+                        onClick={() => updateStatus(listing.id, "published")}
+                        className="rounded-lg bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {updatingId === listing.id ? "İşleniyor..." : "Onayla"}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={updatingId === listing.id}
+                        onClick={() => updateStatus(listing.id, "rejected")}
+                        className="rounded-lg bg-red-600 px-5 py-3 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Reddet
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
     </main>

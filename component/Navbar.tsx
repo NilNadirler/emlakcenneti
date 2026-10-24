@@ -79,13 +79,13 @@ export default function Navbar() {
         <Link href="/" className="flex items-center gap-2">
           <House size={30} className="text-[#C58B58]" />
           <span className="text-2xl font-bold">
-            Emlak <span className="text-[#C58B58]">Cenneti</span>
+            Emlak<span className="text-[#C58B58]">Cenneti</span>
           </span>
         </Link>
 
         <div className="flex items-center gap-5">
-          <Link href="/satilik">Satılık</Link>
-          <Link href="/kiralik">Kiralık</Link>
+          <Link href="/ilanlarim">İlanlarım</Link>
+    
 
           {user && isAdmin && (
             <Link

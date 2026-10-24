@@ -65,7 +65,18 @@ export default function IlanVer() {
           İlanını oluşturmak için aşağıdaki bilgileri doldur.
         </p>
 
-        <form
+        <form lang="tr"
+        onInvalidCapture={(e) => {
+  const alan = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+  if (alan.validity.valueMissing) {
+    alan.setCustomValidity("Lütfen bu alanı doldurun.");
+  }
+}}
+onInputCapture={(e) => {
+  const alan = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+  alan.setCustomValidity("");
+}}
   className="mt-6 space-y-6"
   onSubmit={async (e) => {
     e.preventDefault();
@@ -88,17 +99,35 @@ export default function IlanVer() {
     console.log("Gönderilecek ilan durumu:", "pending");
     const fiyat = Number(formData.get("fiyat"));
 
+
+    const {
+  data: { user: authUser },
+  error: authError,
+} = await supabase.auth.getUser();
+
+if (authError || !authUser) {
+  setMesaj("Oturum bulunamadı. Lütfen tekrar giriş yap.");
+  return;
+}
+    const { data: sessionData } = await supabase.auth.getSession();
+
+console.log("Oturum ID:", sessionData.session?.user.id);
+console.log("Kayıt user_id:", authUser.id);
+console.log(
+  "Access token var mı:",
+  Boolean(sessionData.session?.access_token)
+);
     const { data, error } = await supabase
       .from("listings")
       .insert({
-        user_id: user.id,
+        user_id: authUser.id,
         status: "pending",
         title: String(formData.get("baslik") || ""),
         description: String(formData.get("aciklama") || ""),
         category: String(formData.get("kategori") || ""),
         listing_type: String(formData.get("ilanTuru") || ""),
         price: fiyat,
-        currency: String(formData.get("paraBirimi") || "TL"),
+        currency: String(formData.get("paraBirimi") || "TRY"),
         city: String(formData.get("İl") || ""),
         district: String(formData.get("İlçe") || ""),
         neighborhood: String(formData.get("Semt / Mahalle") || ""),
@@ -129,9 +158,50 @@ export default function IlanVer() {
 
     if (error) {
       console.error("İlan kaydetme hatası:", error);
+      console.log("HATA DETAYI:", JSON.stringify(error, null, 2));
       setMesaj(`İlan kaydedilemedi: ${error.message}`);
       return;
     }
+
+    if (photos.length > 0) {
+      setMesaj("İlan kaydedildi, fotoğraflar yükleniyor...");
+
+      const photoRows = [];
+
+      for (const photo of photos) {
+        const filePath = `${user.id}/${data.id}/${crypto.randomUUID()}-${photo.name}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("listing-photos")
+          .upload(filePath, photo);
+
+        if (uploadError) {
+          console.error("Fotoğraf yükleme hatası:", uploadError);
+          setMesaj(`İlan kaydedildi ama fotoğraf yüklenemedi: ${uploadError.message}`);
+          return;
+        }
+
+  
+
+        photoRows.push({
+  listing_id: data.id,
+  storage_path: filePath,
+  sort_order: photoRows.length,
+  is_cover: photoRows.length === 0,
+});
+      }
+
+      const { error: photoError } = await supabase
+        .from("listing_photos")
+        .insert(photoRows);
+
+      if (photoError) {
+        console.error("Fotoğraf kayıt hatası:", photoError);
+        setMesaj(`İlan kaydedildi ama fotoğraf bilgileri kaydedilemedi: ${photoError.message}`);
+        return;
+      }
+    }
+
 
     setMesaj("İlan başarıyla kaydedildi!");
     window.location.href = "/ilanlarim";
@@ -178,7 +248,7 @@ export default function IlanVer() {
               <label className="block text-sm font-medium">
                 Para birimi
                 <select name="paraBirimi" className={`${inputClass} mt-1.5`}>
-                  <option>TL</option><option>USD</option><option>EUR</option><option>GBP</option>
+                  <option>TRY</option><option>USD</option><option>EUR</option><option>GBP</option>
                 </select>
               </label>
 
